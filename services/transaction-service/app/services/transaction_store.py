@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from sys import flags
 from typing import Dict, List, Optional
 from uuid import uuid4
 
@@ -22,7 +21,7 @@ class TransactionStore:
                 "device_id": "device_a91",
                 "rapid_repeat": False,
                 "is_flagged": True,
-                "flags": ["HIGH_AMOUNT", "CRYPTO_TXN"],
+                "flags": ["HIGH_AMOUNT", "RISKY_CATEGORY"],
                 "created_at": datetime.now(timezone.utc),
             },
             {
@@ -42,22 +41,23 @@ class TransactionStore:
                 "created_at": datetime.now(timezone.utc),
             },
         ]
-        def _derive_flags(self, payload: TransactionCreate) -> List[str]:
-            flags: List[str] = []
 
-            if payload.amount >= 5000:
-                flags.append("HIGH_AMOUNT")
+    def _derive_flags(self, payload: TransactionCreate) -> List[str]:
+        flags: List[str] = []
 
-            risky_categories = {"crypto", "gift_cards", "wire_transfer"}
-            if payload.category.lower() in risky_categories:
-                flags.append("RISKY_CATEGORY")
+        if payload.amount >= 5000:
+            flags.append("HIGH_AMOUNT")
 
-            if payload.rapid_repeat:
-                flags.append("RAPID_REPEAT")
+        risky_categories = {"crypto", "gift_cards", "wire_transfer"}
+        if payload.category.lower() in risky_categories:
+            flags.append("RISKY_CATEGORY")
 
-            hour = payload.timestamp.hour
-            if hour < 6 or hour > 23:
-                flags.append("ODD_HOUR")
+        if payload.rapid_repeat:
+            flags.append("RAPID_REPEAT")
+
+        hour = payload.timestamp.hour
+        if hour < 6 or hour > 23:
+            flags.append("ODD_HOUR")
 
         return flags
 
@@ -67,7 +67,10 @@ class TransactionStore:
         return self._transactions
 
     def get_transaction(self, transaction_id: str) -> Optional[Dict]:
-        return next((txn for txn in self._transactions if txn["id"] == transaction_id), None)
+        return next(
+            (txn for txn in self._transactions if txn["id"] == transaction_id),
+            None,
+        )
 
     def get_transactions_by_user(self, user_id: str) -> List[Dict]:
         return [txn for txn in self._transactions if txn["user_id"] == user_id]
