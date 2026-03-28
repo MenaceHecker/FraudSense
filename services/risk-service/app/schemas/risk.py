@@ -1,10 +1,12 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class RiskAssessmentResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     id: str
     transaction_id: str
     risk_score: int
