@@ -13,6 +13,7 @@ type QueryArgs = {
   id?: string;
   userId?: string;
   flaggedOnly?: boolean;
+  transactionId?: string;
 };
 
 type MutationArgs = {
@@ -43,6 +44,10 @@ export const resolvers = {
     transactionsByUser: async (_parent: unknown, args: QueryArgs) => {
       if (!args.userId) return [];
       return fetchTransactionsByUser(args.userId);
+    },
+    riskAssessment: async (_parent: unknown, args: QueryArgs) => {
+      if (!args.transactionId) return null;
+      return fetchRiskAssessmentByTransactionId(args.transactionId);
     },
   },
 
