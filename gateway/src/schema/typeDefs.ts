@@ -72,9 +72,11 @@ export const typeDefs = gql`
     transactions(flaggedOnly: Boolean): [Transaction!]!
     transaction(id: ID!): Transaction
     transactionsByUser(userId: String!): [Transaction!]!
+    riskAssessment(transactionId: ID!): RiskAssessment
   }
 
   type Mutation {
     ingestTransaction(input: TransactionInput!): Transaction!
+    analyzeTransaction(transactionId: ID!): RiskAssessment!
   }
 `;
