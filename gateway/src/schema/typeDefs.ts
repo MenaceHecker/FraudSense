@@ -68,15 +68,36 @@ export const typeDefs = gql`
     rapidRepeat: Boolean
   }
 
+  input CreateAlertInput {
+    transactionId: ID!
+    userId: String!
+    amount: Float!
+    riskScore: Int!
+    severity: String!
+    aiReason: String!
+    recommendedAction: String!
+  }
+
+  input UpdateAlertStatusInput {
+    alertId: ID!
+    status: String!
+    analystNotes: String
+  }
+
   type Query {
     transactions(flaggedOnly: Boolean): [Transaction!]!
     transaction(id: ID!): Transaction
     transactionsByUser(userId: String!): [Transaction!]!
     riskAssessment(transactionId: ID!): RiskAssessment
+    alerts(status: String, severity: String): [Alert!]!
+    alert(id: ID!): Alert
+    dashboardStats: DashboardStats!
   }
 
   type Mutation {
     ingestTransaction(input: TransactionInput!): Transaction!
     analyzeTransaction(transactionId: ID!): RiskAssessment!
+    createAlert(input: CreateAlertInput!): Alert!
+    updateAlertStatus(input: UpdateAlertStatusInput!): Alert!
   }
 `;
