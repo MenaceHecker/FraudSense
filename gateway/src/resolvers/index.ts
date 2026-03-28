@@ -4,6 +4,10 @@ import {
   fetchTransactions,
   fetchTransactionsByUser,
 } from "../services/transactionClient";
+import {
+  analyzeTransactionRisk,
+  fetchRiskAssessmentByTransactionId,
+} from "../services/riskClient";
 
 type QueryArgs = {
   id?: string;
@@ -24,6 +28,7 @@ type MutationArgs = {
     deviceId?: string | null;
     rapidRepeat?: boolean | null;
   };
+  transactionId?: string;
 };
 
 export const resolvers = {
@@ -45,6 +50,12 @@ export const resolvers = {
     ingestTransaction: async (_parent: unknown, args: MutationArgs) => {
       return createTransaction(args.input);
     },
+    analyzeTransaction: async (_parent: unknown, args: MutationArgs) => {
+      if (!args.transactionId) {
+        throw new Error("transactionId is required");
+      }
+      return analyzeTransactionRisk(args.transactionId);
+    },
   },
 
   Transaction: {
@@ -55,7 +66,18 @@ export const resolvers = {
     rapidRepeat: (parent: any) => parent.rapid_repeat,
     isFlagged: (parent: any) => parent.is_flagged,
     createdAt: (parent: any) => parent.created_at,
-    riskAssessment: async () => null,
+    riskAssessment: async (parent: any) => {
+      return fetchRiskAssessmentByTransactionId(parent.id);
+    },
     alerts: async () => [],
+  },
+
+  RiskAssessment: {
+    transactionId: (parent: any) => parent.transaction_id,
+    riskScore: (parent: any) => parent.risk_score,
+    isSuspicious: (parent: any) => parent.is_suspicious,
+    recommendedAction: (parent: any) => parent.recommended_action,
+    keySignals: (parent: any) => parent.key_signals,
+    modelVersion: (parent: any) => parent.model_version,
   },
 };
