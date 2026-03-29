@@ -1,10 +1,28 @@
 version: "3.9"
 
 services:
+  postgres:
+    image: postgres:16
+    container_name: fraudsense-postgres
+    environment:
+      POSTGRES_USER: fraudsense
+      POSTGRES_PASSWORD: fraudsense
+      POSTGRES_DB: fraudsense
+    ports:
+      - "5432:5432"
+    volumes:
+      - fraudsense_postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+
   transaction-service:
     build:
       context: ./services/transaction-service
     container_name: fraudsense-transaction-service
+    environment:
+      DATABASE_URL: postgresql://fraudsense:fraudsense@postgres:5432/fraudsense
+    depends_on:
+      - postgres
     ports:
       - "${TRANSACTION_SERVICE_PORT:-8001}:8001"
     restart: unless-stopped
@@ -15,7 +33,9 @@ services:
     container_name: fraudsense-risk-service
     environment:
       TRANSACTION_SERVICE_URL: http://transaction-service:8001
+      DATABASE_URL: postgresql://fraudsense:fraudsense@postgres:5432/fraudsense
     depends_on:
+      - postgres
       - transaction-service
     ports:
       - "${RISK_SERVICE_PORT:-8002}:8002"
@@ -25,6 +45,10 @@ services:
     build:
       context: ./services/alert-service
     container_name: fraudsense-alert-service
+    environment:
+      DATABASE_URL: postgresql://fraudsense:fraudsense@postgres:5432/fraudsense
+    depends_on:
+      - postgres
     ports:
       - "${ALERT_SERVICE_PORT:-8003}:8003"
     restart: unless-stopped
@@ -45,3 +69,6 @@ services:
     ports:
       - "${GATEWAY_PORT:-4000}:4000"
     restart: unless-stopped
+
+volumes:
+  fraudsense_postgres_data:
