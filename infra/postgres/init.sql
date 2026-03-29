@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE TABLE IF NOT EXISTS risk_assessments (
     id UUID PRIMARY KEY,
     transaction_id UUID UNIQUE NOT NULL,
-    risk_score INT NOT NULL, chatg
+    risk_score INT NOT NULL,
     is_suspicious BOOLEAN NOT NULL,
     severity VARCHAR(20) NOT NULL,
     reason TEXT NOT NULL,
