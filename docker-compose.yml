@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  transaction-service:
+    build:
+      context: ./services/transaction-service
+    container_name: fraudsense-transaction-service
+    ports:
+      - "${TRANSACTION_SERVICE_PORT:-8001}:8001"
+    restart: unless-stopped
+
+  risk-service:
+    build:
+      context: ./services/risk-service
+    container_name: fraudsense-risk-service
+    environment:
+      TRANSACTION_SERVICE_URL: http://transaction-service:8001
+    depends_on:
+      - transaction-service
+    ports:
+      - "${RISK_SERVICE_PORT:-8002}:8002"
+    restart: unless-stopped
+
+  alert-service:
+    build:
+      context: ./services/alert-service
+    container_name: fraudsense-alert-service
+    ports:
+      - "${ALERT_SERVICE_PORT:-8003}:8003"
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ./gateway
+    container_name: fraudsense-gateway
+    environment:
+      PORT: 4000
+      TRANSACTION_SERVICE_URL: http://transaction-service:8001
+      RISK_SERVICE_URL: http://risk-service:8002
+      ALERT_SERVICE_URL: http://alert-service:8003
+    depends_on:
+      - transaction-service
+      - risk-service
+      - alert-service
+    ports:
+      - "${GATEWAY_PORT:-4000}:4000"
+    restart: unless-stopped
