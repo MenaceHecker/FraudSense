@@ -82,3 +82,13 @@ export async function fetchDashboardStats() {
   const response = await axios.get(`${env.alertServiceUrl}/stats/dashboard`);
   return response.data;
 }
+
+export async function ensureAlertForTransaction(input: CreateAlertInput) {
+  const existingAlerts = await fetchAlertsByTransactionId(input.transactionId);
+
+  if (existingAlerts.length > 0) {
+    return existingAlerts[0];
+  }
+
+  return createAlert(input);
+}
