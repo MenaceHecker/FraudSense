@@ -4,19 +4,16 @@ import {
   fetchTransactions,
   fetchTransactionsByUser,
 } from "../services/transactionClient";
-import {
-  analyzeTransactionRisk,
-  fetchRiskAssessmentByTransactionId,
-} from "../services/riskClient";
+import { fetchRiskAssessmentByTransactionId } from "../services/riskClient";
 import {
   createAlert,
-  ensureAlertForTransaction,
   fetchAlertById,
   fetchAlerts,
   fetchAlertsByTransactionId,
   fetchDashboardStats,
   updateAlertStatus,
 } from "../services/alertClient";
+import { analyzeTransactionAndCreateAlertIfNeeded } from "../services/fraudOrchestrator";
 
 type QueryArgs = {
   id?: string;
@@ -94,26 +91,7 @@ export const resolvers = {
         throw new Error("transactionId is required");
       }
 
-      const transaction = await fetchTransactionById(args.transactionId);
-      const assessment = await analyzeTransactionRisk(args.transactionId);
-
-      if (
-        transaction &&
-        assessment &&
-        (assessment.severity === "medium" || assessment.severity === "high")
-      ) {
-        await ensureAlertForTransaction({
-          transactionId: transaction.id,
-          userId: transaction.user_id,
-          amount: Number(transaction.amount),
-          riskScore: Number(assessment.risk_score),
-          severity: assessment.severity,
-          aiReason: assessment.reason,
-          recommendedAction: assessment.recommended_action,
-        });
-      }
-
-      return assessment;
+      return analyzeTransactionAndCreateAlertIfNeeded(args.transactionId);
     },
 
     createAlert: async (_parent: unknown, args: MutationArgs) => {
