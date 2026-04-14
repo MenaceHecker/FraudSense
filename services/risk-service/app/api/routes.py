@@ -1,5 +1,7 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
+from app.db.deps import get_db
 from app.schemas.risk import RiskAssessmentResponse
 from app.services.risk_store import risk_store
 from app.services.transaction_client import fetch_transaction
@@ -13,8 +15,11 @@ def health() -> dict:
 
 
 @router.get("/risk/{transaction_id}", response_model=RiskAssessmentResponse)
-def get_risk_assessment(transaction_id: str) -> RiskAssessmentResponse:
-    assessment = risk_store.get(transaction_id)
+def get_risk_assessment(
+    transaction_id: str,
+    db: Session = Depends(get_db),
+) -> RiskAssessmentResponse:
+    assessment = risk_store.get(db, transaction_id)
     if not assessment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -24,8 +29,11 @@ def get_risk_assessment(transaction_id: str) -> RiskAssessmentResponse:
 
 
 @router.post("/risk/analyze/{transaction_id}", response_model=RiskAssessmentResponse)
-async def analyze_transaction(transaction_id: str) -> RiskAssessmentResponse:
-    existing = risk_store.get(transaction_id)
+async def analyze_transaction(
+    transaction_id: str,
+    db: Session = Depends(get_db),
+) -> RiskAssessmentResponse:
+    existing = risk_store.get(db, transaction_id)
     if existing:
         return RiskAssessmentResponse(**existing)
 
@@ -37,5 +45,5 @@ async def analyze_transaction(transaction_id: str) -> RiskAssessmentResponse:
         )
 
     assessment = risk_store.build_assessment(transaction)
-    risk_store.save(transaction_id, assessment)
-    return RiskAssessmentResponse(**assessment)
+    saved = risk_store.save(db, transaction_id, assessment)
+    return RiskAssessmentResponse(**saved)
