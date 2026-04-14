@@ -20,7 +20,7 @@ services:
       context: ./services/transaction-service
     container_name: fraudsense-transaction-service
     environment:
-      DATABASE_URL: postgresql://fraudsense:fraudsense@postgres:5432/fraudsense
+      DATABASE_URL: postgresql+psycopg://fraudsense:fraudsense@postgres:5432/fraudsense
     depends_on:
       - postgres
     ports:
@@ -33,7 +33,7 @@ services:
     container_name: fraudsense-risk-service
     environment:
       TRANSACTION_SERVICE_URL: http://transaction-service:8001
-      DATABASE_URL: postgresql://fraudsense:fraudsense@postgres:5432/fraudsense
+      DATABASE_URL: postgresql+psycopg://fraudsense:fraudsense@postgres:5432/fraudsense
     depends_on:
       - postgres
       - transaction-service
@@ -46,7 +46,7 @@ services:
       context: ./services/alert-service
     container_name: fraudsense-alert-service
     environment:
-      DATABASE_URL: postgresql://fraudsense:fraudsense@postgres:5432/fraudsense
+      DATABASE_URL: postgresql+psycopg://fraudsense:fraudsense@postgres:5432/fraudsense
     depends_on:
       - postgres
     ports:
