@@ -1,18 +1,81 @@
 from datetime import datetime, timezone
 from typing import Dict, Optional
-from uuid import uuid4
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.risk_assessment import RiskAssessment
 
 
 class RiskStore:
-    def __init__(self) -> None:
-        self._assessments: Dict[str, Dict] = {}
+    def serialize(self, assessment: RiskAssessment) -> Dict:
+        return {
+            "id": str(assessment.id),
+            "transaction_id": str(assessment.transaction_id),
+            "risk_score": assessment.risk_score,
+            "is_suspicious": assessment.is_suspicious,
+            "severity": assessment.severity,
+            "reason": assessment.reason,
+            "recommended_action": assessment.recommended_action,
+            "key_signals": assessment.key_signals or [],
+            "model_version": assessment.model_version,
+            "created_at": assessment.created_at,
+        }
 
-    def get(self, transaction_id: str) -> Optional[Dict]:
-        return self._assessments.get(transaction_id)
+    def get(self, db: Session, transaction_id: str) -> Optional[Dict]:
+        row = (
+            db.execute(
+                select(RiskAssessment).where(
+                    RiskAssessment.transaction_id == UUID(transaction_id)
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if not row:
+            return None
+        return self.serialize(row)
 
-    def save(self, transaction_id: str, assessment: Dict) -> Dict:
-        self._assessments[transaction_id] = assessment
-        return assessment
+    def save(self, db: Session, transaction_id: str, assessment: Dict) -> Dict:
+        existing = (
+            db.execute(
+                select(RiskAssessment).where(
+                    RiskAssessment.transaction_id == UUID(transaction_id)
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+        if existing:
+            existing.risk_score = assessment["risk_score"]
+            existing.is_suspicious = assessment["is_suspicious"]
+            existing.severity = assessment["severity"]
+            existing.reason = assessment["reason"]
+            existing.recommended_action = assessment["recommended_action"]
+            existing.key_signals = assessment["key_signals"]
+            existing.model_version = assessment["model_version"]
+            db.commit()
+            db.refresh(existing)
+            return self.serialize(existing)
+
+        row = RiskAssessment(
+            transaction_id=UUID(transaction_id),
+            risk_score=assessment["risk_score"],
+            is_suspicious=assessment["is_suspicious"],
+            severity=assessment["severity"],
+            reason=assessment["reason"],
+            recommended_action=assessment["recommended_action"],
+            key_signals=assessment["key_signals"],
+            model_version=assessment["model_version"],
+            created_at=assessment["created_at"],
+        )
+
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return self.serialize(row)
 
     def build_assessment(self, transaction: Dict) -> Dict:
         amount = float(transaction["amount"])
@@ -65,17 +128,11 @@ class RiskStore:
                 f"and risky behavior patterns at merchant {merchant}."
             )
         elif severity == "medium":
-            reason = (
-                f"Transaction shows moderate fraud signals and should be reviewed before approval."
-            )
+            reason = "Transaction shows moderate fraud signals and should be reviewed before approval."
         else:
-            reason = (
-                f"Transaction is within low-risk bounds based on current rules."
-            )
+            reason = "Transaction is within low-risk bounds based on current rules."
 
         return {
-            "id": str(uuid4()),
-            "transaction_id": transaction["id"],
             "risk_score": score,
             "is_suspicious": is_suspicious,
             "severity": severity,
