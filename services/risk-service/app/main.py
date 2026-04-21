@@ -2,7 +2,7 @@ from fastapi import FastAPI
 
 from app.api.routes import router
 from app.db.database import Base, engine
-from app.models.risk_assessment import RiskAssessment  # noqa: F401
+from app.models.risk_assessment import RiskAssessment  
 
 app = FastAPI(
     title="FraudSense Risk Service",
