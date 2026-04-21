@@ -1,107 +1,116 @@
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
-from uuid import uuid4
+from uuid import UUID
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.alert import Alert
 from app.schemas.alert import AlertCreate, AlertStatusUpdate
 
 
 class AlertStore:
-    def __init__(self) -> None:
-        self._alerts: List[Dict] = [
-            {
-                "id": str(uuid4()),
-                "transaction_id": "seed-transaction-001",
-                "user_id": "user_101",
-                "amount": 8450.75,
-                "risk_score": 82,
-                "severity": "high",
-                "ai_reason": "Large crypto transaction with elevated fraud signals.",
-                "recommended_action": "block",
-                "status": "open",
-                "analyst_notes": None,
-                "created_at": datetime.now(timezone.utc),
-                "resolved_at": None,
-            },
-            {
-                "id": str(uuid4()),
-                "transaction_id": "seed-transaction-002",
-                "user_id": "user_102",
-                "amount": 1200.00,
-                "risk_score": 58,
-                "severity": "medium",
-                "ai_reason": "Moderate anomaly detected based on category and timing.",
-                "recommended_action": "review",
-                "status": "reviewing",
-                "analyst_notes": "Checking prior customer history.",
-                "created_at": datetime.now(timezone.utc),
-                "resolved_at": None,
-            },
-        ]
+    def serialize(self, alert: Alert) -> Dict:
+        return {
+            "id": str(alert.id),
+            "transaction_id": str(alert.transaction_id),
+            "user_id": alert.user_id,
+            "amount": float(alert.amount),
+            "risk_score": alert.risk_score,
+            "severity": alert.severity,
+            "ai_reason": alert.ai_reason,
+            "recommended_action": alert.recommended_action,
+            "status": alert.status,
+            "analyst_notes": alert.analyst_notes,
+            "created_at": alert.created_at,
+            "resolved_at": alert.resolved_at,
+        }
 
     def list_alerts(
         self,
+        db: Session,
         status: Optional[str] = None,
         severity: Optional[str] = None,
     ) -> List[Dict]:
-        alerts = self._alerts
+        stmt = select(Alert)
 
         if status:
-            alerts = [alert for alert in alerts if alert["status"] == status]
+            stmt = stmt.where(Alert.status == status)
 
         if severity:
-            alerts = [alert for alert in alerts if alert["severity"] == severity]
+            stmt = stmt.where(Alert.severity == severity)
 
-        return alerts
+        rows = db.execute(stmt.order_by(Alert.created_at.desc())).scalars().all()
+        return [self.serialize(row) for row in rows]
 
-    def get_alert(self, alert_id: str) -> Optional[Dict]:
-        return next((alert for alert in self._alerts if alert["id"] == alert_id), None)
+    def get_alert(self, db: Session, alert_id: str) -> Optional[Dict]:
+        row = db.get(Alert, UUID(alert_id))
+        if not row:
+            return None
+        return self.serialize(row)
 
-    def get_alerts_by_transaction(self, transaction_id: str) -> List[Dict]:
-        return [
-            alert for alert in self._alerts if alert["transaction_id"] == transaction_id
-        ]
+    def get_alerts_by_transaction(self, db: Session, transaction_id: str) -> List[Dict]:
+        rows = (
+            db.execute(
+                select(Alert)
+                .where(Alert.transaction_id == UUID(transaction_id))
+                .order_by(Alert.created_at.desc())
+            )
+            .scalars()
+            .all()
+        )
+        return [self.serialize(row) for row in rows]
 
-    def create_alert(self, payload: AlertCreate) -> Dict:
-        alert = {
-            "id": str(uuid4()),
-            "transaction_id": payload.transaction_id,
-            "user_id": payload.user_id,
-            "amount": payload.amount,
-            "risk_score": payload.risk_score,
-            "severity": payload.severity.lower(),
-            "ai_reason": payload.ai_reason,
-            "recommended_action": payload.recommended_action.lower(),
-            "status": "open",
-            "analyst_notes": None,
-            "created_at": datetime.now(timezone.utc),
-            "resolved_at": None,
-        }
+    def create_alert(self, db: Session, payload: AlertCreate) -> Dict:
+        alert = Alert(
+            transaction_id=UUID(payload.transaction_id),
+            user_id=payload.user_id,
+            amount=payload.amount,
+            risk_score=payload.risk_score,
+            severity=payload.severity.lower(),
+            ai_reason=payload.ai_reason,
+            recommended_action=payload.recommended_action.lower(),
+            status="open",
+            analyst_notes=None,
+            created_at=datetime.now(timezone.utc),
+            resolved_at=None,
+        )
 
-        self._alerts.append(alert)
-        return alert
+        db.add(alert)
+        db.commit()
+        db.refresh(alert)
+        return self.serialize(alert)
 
-    def update_status(self, alert_id: str, payload: AlertStatusUpdate) -> Optional[Dict]:
-        alert = self.get_alert(alert_id)
+    def update_status(
+        self,
+        db: Session,
+        alert_id: str,
+        payload: AlertStatusUpdate,
+    ) -> Optional[Dict]:
+        alert = db.get(Alert, UUID(alert_id))
         if not alert:
             return None
 
         new_status = payload.status.lower()
-        alert["status"] = new_status
-        alert["analyst_notes"] = payload.analyst_notes
+        alert.status = new_status
+        alert.analyst_notes = payload.analyst_notes
 
         if new_status == "resolved":
-            alert["resolved_at"] = datetime.now(timezone.utc)
+            alert.resolved_at = datetime.now(timezone.utc)
         else:
-            alert["resolved_at"] = None
+            alert.resolved_at = None
 
-        return alert
+        db.commit()
+        db.refresh(alert)
+        return self.serialize(alert)
 
-    def get_dashboard_stats(self) -> Dict:
-        high_alerts = sum(1 for alert in self._alerts if alert["severity"] == "high")
-        medium_alerts = sum(1 for alert in self._alerts if alert["severity"] == "medium")
-        resolved_alerts = sum(1 for alert in self._alerts if alert["status"] == "resolved")
+    def get_dashboard_stats(self, db: Session) -> Dict:
+        alerts = db.execute(select(Alert)).scalars().all()
 
-        flagged_transactions = len({alert["transaction_id"] for alert in self._alerts})
+        high_alerts = sum(1 for alert in alerts if alert.severity == "high")
+        medium_alerts = sum(1 for alert in alerts if alert.severity == "medium")
+        resolved_alerts = sum(1 for alert in alerts if alert.status == "resolved")
+        flagged_transactions = len({str(alert.transaction_id) for alert in alerts})
 
         return {
             "total_transactions": flagged_transactions + 3,
