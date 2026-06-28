@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
 
+## Alert model representing a fraud alert in the system.
 
 class Alert(Base):
     __tablename__ = "alerts"
