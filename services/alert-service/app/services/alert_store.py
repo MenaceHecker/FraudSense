@@ -2,10 +2,11 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.alert import Alert
+from app.models.enums import AlertStatus
 from app.schemas.alert import AlertCreate, AlertStatusUpdate
 
 
@@ -15,12 +16,12 @@ class AlertStore:
             "id": str(alert.id),
             "transaction_id": str(alert.transaction_id),
             "user_id": alert.user_id,
-            "amount": float(alert.amount),
+            "amount": str(alert.amount),
             "risk_score": alert.risk_score,
-            "severity": alert.severity,
+            "severity": alert.severity.value,
             "ai_reason": alert.ai_reason,
-            "recommended_action": alert.recommended_action,
-            "status": alert.status,
+            "recommended_action": alert.recommended_action.value,
+            "status": alert.status.value,
             "analyst_notes": alert.analyst_notes,
             "created_at": alert.created_at,
             "resolved_at": alert.resolved_at,
@@ -67,13 +68,10 @@ class AlertStore:
             user_id=payload.user_id,
             amount=payload.amount,
             risk_score=payload.risk_score,
-            severity=payload.severity.lower(),
+            severity=payload.severity,
             ai_reason=payload.ai_reason,
-            recommended_action=payload.recommended_action.lower(),
-            status="open",
-            analyst_notes=None,
-            created_at=datetime.now(timezone.utc),
-            resolved_at=None,
+            recommended_action=payload.recommended_action,
+            status=AlertStatus.OPEN,
         )
 
         db.add(alert)
@@ -91,11 +89,10 @@ class AlertStore:
         if not alert:
             return None
 
-        new_status = payload.status.lower()
-        alert.status = new_status
+        alert.status = payload.status
         alert.analyst_notes = payload.analyst_notes
 
-        if new_status == "resolved":
+        if payload.status == AlertStatus.RESOLVED:
             alert.resolved_at = datetime.now(timezone.utc)
         else:
             alert.resolved_at = None
@@ -105,19 +102,31 @@ class AlertStore:
         return self.serialize(alert)
 
     def get_dashboard_stats(self, db: Session) -> Dict:
-        alerts = db.execute(select(Alert)).scalars().all()
+        stats_query = select(
+            func.count(func.distinct(Alert.transaction_id)).label(
+                "flagged_transactions"
+            ),
+            func.sum(case((Alert.severity == "high", 1), else_=0)).label(
+                "high_severity_alerts"
+            ),
+            func.sum(case((Alert.severity == "medium", 1), else_=0)).label(
+                "medium_severity_alerts"
+            ),
+            func.sum(case((Alert.status == "resolved", 1), else_=0)).label(
+                "resolved_alerts"
+            ),
+        )
+        result = db.execute(stats_query).first()
 
-        high_alerts = sum(1 for alert in alerts if alert.severity == "high")
-        medium_alerts = sum(1 for alert in alerts if alert.severity == "medium")
-        resolved_alerts = sum(1 for alert in alerts if alert.status == "resolved")
-        flagged_transactions = len({str(alert.transaction_id) for alert in alerts})
+        stats = result._asdict() if result else {}
+        flagged_transactions = stats.get("flagged_transactions") or 0
 
         return {
             "total_transactions": flagged_transactions + 3,
             "flagged_transactions": flagged_transactions,
-            "high_severity_alerts": high_alerts,
-            "medium_severity_alerts": medium_alerts,
-            "resolved_alerts": resolved_alerts,
+            "high_severity_alerts": stats.get("high_severity_alerts") or 0,
+            "medium_severity_alerts": stats.get("medium_severity_alerts") or 0,
+            "resolved_alerts": stats.get("resolved_alerts") or 0,
         }
 
 
