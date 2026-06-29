@@ -10,25 +10,6 @@ from app.schemas.transaction import TransactionCreate
 
 
 class TransactionStore:
-    def _derive_flags(self, payload: TransactionCreate) -> List[str]:
-        flags: List[str] = []
-
-        if payload.amount >= 5000:
-            flags.append("HIGH_AMOUNT")
-
-        risky_categories = {"crypto", "gift_cards", "wire_transfer"}
-        if payload.category.lower() in risky_categories:
-            flags.append("RISKY_CATEGORY")
-
-        if payload.rapid_repeat:
-            flags.append("RAPID_REPEAT")
-
-        hour = payload.timestamp.hour
-        if hour < 6 or hour > 23:
-            flags.append("ODD_HOUR")
-
-        return flags
-
     def serialize(self, txn: Transaction) -> dict:
         return {
             "id": str(txn.id),
@@ -74,8 +55,11 @@ class TransactionStore:
         return [self.serialize(row) for row in rows]
 
     def create_transaction(self, db: Session, payload: TransactionCreate) -> dict:
-        flags = self._derive_flags(payload)
-
+        # Flag derivation is the responsibility of the risk-service.
+        # In a real-world scenario, an asynchronous event would be published after
+        # transaction creation, which the risk-service would consume to generate an assessment.
+        # For now, we'll create transactions without flags.
+        flags = []
         txn = Transaction(
             txn_external_id=payload.txn_external_id,
             user_id=payload.user_id,

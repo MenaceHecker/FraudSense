@@ -1,11 +1,13 @@
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.risk_assessment import RiskAssessment
+from app.models.enums import RecommendedAction, Severity
+from app.services.risk_config import DEFAULT_RISK_CONFIG, RiskConfig
 
 
 class RiskStore:
@@ -15,9 +17,9 @@ class RiskStore:
             "transaction_id": str(assessment.transaction_id),
             "risk_score": assessment.risk_score,
             "is_suspicious": assessment.is_suspicious,
-            "severity": assessment.severity,
+            "severity": assessment.severity.value,
             "reason": assessment.reason,
-            "recommended_action": assessment.recommended_action,
+            "recommended_action": assessment.recommended_action.value,
             "key_signals": assessment.key_signals or [],
             "model_version": assessment.model_version,
             "created_at": assessment.created_at,
@@ -77,57 +79,61 @@ class RiskStore:
         db.refresh(row)
         return self.serialize(row)
 
-    def build_assessment(self, transaction: Dict) -> Dict:
+    def build_assessment(
+        self, transaction: Dict, config: RiskConfig = DEFAULT_RISK_CONFIG
+    ) -> Dict:
         amount = float(transaction["amount"])
         category = str(transaction["category"]).lower()
         flags = transaction.get("flags", [])
         rapid_repeat = bool(transaction.get("rapid_repeat", False))
         merchant = transaction.get("merchant", "Unknown merchant")
 
-        score = 5
-        key_signals = []
+        score = config["initial_score"]
+        key_signals: List[str] = []
 
-        if amount >= 5000:
-            score += 35
-            key_signals.append("HIGH_AMOUNT")
-        elif amount >= 1000:
-            score += 15
-            key_signals.append("LARGE_PURCHASE")
+        # Sort thresholds from high to low to ensure we only apply the highest one
+        for th in sorted(
+            config["amount_thresholds"], key=lambda x: x["threshold"], reverse=True
+        ):
+            if amount >= th["threshold"]:
+                score += th["component"]["score"]
+                key_signals.append(th["component"]["key_signal"])
+                break  # Only apply the first (highest) threshold met
 
-        risky_categories = {"crypto", "gift_cards", "wire_transfer"}
-        if category in risky_categories:
-            score += 25
-            key_signals.append("RISKY_CATEGORY")
+        if category in config["risky_categories"]:
+            component = config["risky_categories"][category]
+            score += component["score"]
+            key_signals.append(component["key_signal"])
 
         if rapid_repeat:
-            score += 20
-            key_signals.append("RAPID_REPEAT")
+            score += config["rapid_repeat"]["score"]
+            key_signals.append(config["rapid_repeat"]["key_signal"])
 
         if "ODD_HOUR" in flags:
-            score += 10
-            key_signals.append("ODD_HOUR")
+            score += config["odd_hour"]["score"]
+            key_signals.append(config["odd_hour"]["key_signal"])
 
         score = min(score, 100)
 
         if score >= 75:
-            severity = "high"
+            severity = Severity.HIGH
             is_suspicious = True
-            recommended_action = "block"
+            recommended_action = RecommendedAction.BLOCK
         elif score >= 45:
-            severity = "medium"
+            severity = Severity.MEDIUM
             is_suspicious = True
-            recommended_action = "review"
+            recommended_action = RecommendedAction.REVIEW
         else:
-            severity = "low"
+            severity = Severity.LOW
             is_suspicious = False
-            recommended_action = "allow"
+            recommended_action = RecommendedAction.ALLOW
 
-        if severity == "high":
+        if severity == Severity.HIGH:
             reason = (
                 f"Transaction shows multiple fraud indicators, including elevated amount "
                 f"and risky behavior patterns at merchant {merchant}."
             )
-        elif severity == "medium":
+        elif severity == Severity.MEDIUM:
             reason = "Transaction shows moderate fraud signals and should be reviewed before approval."
         else:
             reason = "Transaction is within low-risk bounds based on current rules."
