@@ -1,19 +1,33 @@
 import { ApolloServer } from "@apollo/server";
-import { startStandaloneServer } from "@apollo/server/standalone";
+import { expressMiddleware } from "@apollo/server/express4";
+import bodyParser from "body-parser";
+import cors from "cors";
+import express from "express";
 import { env } from "./config/env";
 import { resolvers } from "./resolvers";
 import { typeDefs } from "./schema/typeDefs";
 
 async function startServer() {
+  const app = express();
+
   const server = new ApolloServer({
     typeDefs,
     resolvers,
   });
+  await server.start();
 
-  const { url } = await startStandaloneServer(server, {
-    listen: { port: env.port },
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok", service: "gateway" });
   });
-  console.log(`FraudSense Gateway running at ${url}`);
+
+  app.use("/", cors(), bodyParser.json(), expressMiddleware(server));
+
+  await new Promise<void>((resolve) =>
+    app.listen({ port: env.port }, resolve)
+  );
+
+  console.log(`FraudSense Gateway running at http://localhost:${env.port}/`);
+  console.log(`Health check at http://localhost:${env.port}/health`);
 }
 
 startServer().catch((error) => {
