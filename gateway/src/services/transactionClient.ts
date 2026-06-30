@@ -35,6 +35,14 @@ export async function fetchTransactionById(id: string) {
   return response.data;
 }
 
+export async function fetchTransactionCount() {
+  const response = await axios.get<TransactionServiceResponse>(
+    `${env.transactionServiceUrl}/transactions`
+  );
+
+  return response.data.total;
+}
+
 export async function fetchTransactionsByUser(userId: string) {
   const response = await axios.get<TransactionServiceResponse>(
     `${env.transactionServiceUrl}/transactions/user/${userId}`

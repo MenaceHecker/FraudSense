@@ -121,8 +121,10 @@ class AlertStore:
         stats = result._asdict() if result else {}
         flagged_transactions = stats.get("flagged_transactions") or 0
 
+        # The alert-service only sees flagged transactions; the gateway overrides
+        # total_transactions with the authoritative count from transaction-service.
         return {
-            "total_transactions": flagged_transactions + 3,
+            "total_transactions": flagged_transactions,
             "flagged_transactions": flagged_transactions,
             "high_severity_alerts": stats.get("high_severity_alerts") or 0,
             "medium_severity_alerts": stats.get("medium_severity_alerts") or 0,

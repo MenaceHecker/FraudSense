@@ -1,6 +1,7 @@
 import {
   createTransaction,
   fetchTransactionById,
+  fetchTransactionCount,
   fetchTransactions,
   fetchTransactionsByUser,
 } from "../services/transactionClient";
@@ -74,7 +75,14 @@ export const resolvers = {
       return fetchAlertById(args.id);
     },
     dashboardStats: async () => {
-      return fetchDashboardStats();
+      // The alert-service only knows about flagged transactions, so the
+      // authoritative total transaction count comes from transaction-service.
+      const [stats, totalTransactions] = await Promise.all([
+        fetchDashboardStats(),
+        fetchTransactionCount(),
+      ]);
+
+      return { ...stats, total_transactions: totalTransactions };
     },
   },
 
